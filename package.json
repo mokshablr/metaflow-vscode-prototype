@@ -1,0 +1,48 @@
+{
+  "name": "metaflow-vscode-prototype",
+  "displayName": "Metaflow",
+  "description": "Metaflow VS Code extension",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:metaflow.runFlow",
+    "onCommand:metaflow.spinStep"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "metaflow.runFlow",
+        "title": "Metaflow: Run Flow"
+      },
+      {
+        "command": "metaflow.spinStep",
+        "title": "Metaflow: Spin Current Step"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "metaflow.runFlow",
+        "key": "ctrl+alt+r",
+        "when": "editorLangId == python"
+      },
+      {
+        "command": "metaflow.spinStep",
+        "key": "ctrl+alt+s",
+        "when": "editorLangId == python"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}
