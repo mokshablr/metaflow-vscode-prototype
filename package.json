@@ -6,6 +6,10 @@
   "publisher": "local",
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Other"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mokshablr/metaflow-vscode-prototype"
+  },
   "activationEvents": [
     "onCommand:metaflow.runFlow",
     "onCommand:metaflow.spinStep"
