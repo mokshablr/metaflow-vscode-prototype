@@ -2,7 +2,7 @@
   "name": "metaflow-vscode-prototype",
   "displayName": "Metaflow",
   "description": "Metaflow VS Code extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "local",
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Other"],
@@ -12,10 +12,19 @@
   },
   "activationEvents": [
     "onCommand:metaflow.runFlow",
-    "onCommand:metaflow.spinStep"
+    "onCommand:metaflow.spinStep",
+    "onView:metaflowExplorer"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "metaflowExplorer",
+          "name": "Metaflow"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "metaflow.runFlow",
@@ -24,8 +33,32 @@
       {
         "command": "metaflow.spinStep",
         "title": "Metaflow: Spin Current Step"
+      },
+      {
+        "command": "metaflow.refreshExplorer",
+        "title": "Refresh Metaflow Explorer",
+        "icon": "$(refresh)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "metaflow.refreshExplorer",
+          "when": "view == metaflowExplorer",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Metaflow",
+      "properties": {
+        "metaflow.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to the Python interpreter that has Metaflow installed."
+        }
+      }
+    },
     "keybindings": [
       {
         "command": "metaflow.runFlow",
