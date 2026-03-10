@@ -5,6 +5,15 @@ import { spawn } from 'child_process';
 
 const CTX = { FLOW: 'flow', RUN: 'run', STEP: 'step', TASK: 'task', ARTIFACT: 'artifact', ERROR: 'error' } as const;
 
+type SortMode = 'default' | 'name' | 'type';
+type RunFilter = 'all' | 'successful' | 'failed';
+
+type NodeStatus = 'done' | 'failed' | 'running' | 'unknown';
+
+interface ArtifactInfo { type: string; preview: string; raw: string; }
+interface StepInfo { name: string; status: NodeStatus; }
+interface TaskInfo { id: string; status: NodeStatus; }
+
 class FlowNode extends vscode.TreeItem {
   constructor(public readonly flowName: string, public readonly runIds: string[]) {
     super(flowName, vscode.TreeItemCollapsibleState.Collapsed);
@@ -19,23 +28,36 @@ class RunNode extends vscode.TreeItem {
   }
 }
 
+function applyStatusIcon(item: vscode.TreeItem, status: string): void {
+  if (status === 'failed') {
+    item.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
+    item.description = 'failed';
+  } else if (status === 'running') {
+    item.iconPath = new vscode.ThemeIcon('loading~spin');
+  }
+}
+
 class StepNode extends vscode.TreeItem {
-  constructor(public readonly pathspec: string, stepName: string) {
-    super(stepName, vscode.TreeItemCollapsibleState.Collapsed);
+  constructor(public readonly pathspec: string, info: StepInfo) {
+    super(info.name, vscode.TreeItemCollapsibleState.Collapsed);
     this.contextValue = CTX.STEP;
+    applyStatusIcon(this, info.status);
   }
 }
 
 class TaskNode extends vscode.TreeItem {
-  constructor(public readonly pathspec: string, taskId: string) {
-    super(taskId, vscode.TreeItemCollapsibleState.Collapsed);
+  constructor(public readonly pathspec: string, info: TaskInfo) {
+    super(info.id, vscode.TreeItemCollapsibleState.Collapsed);
     this.contextValue = CTX.TASK;
+    applyStatusIcon(this, info.status);
   }
 }
 
-class ArtifactNode extends vscode.TreeItem {
-  constructor(name: string, value: string) {
-    super(`${name} = ${value}`, vscode.TreeItemCollapsibleState.None);
+export class ArtifactNode extends vscode.TreeItem {
+  constructor(public readonly artifactName: string, public readonly info: ArtifactInfo) {
+    super(`${artifactName} = ${info.preview}`, vscode.TreeItemCollapsibleState.None);
+    this.description = info.type;
+    this.tooltip = new vscode.MarkdownString(`**${artifactName}** *(${info.type})*\n\n${info.preview}`);
     this.contextValue = CTX.ARTIFACT;
   }
 }
@@ -44,6 +66,7 @@ class ErrorNode extends vscode.TreeItem {
   constructor(message: string) {
     super(message, vscode.TreeItemCollapsibleState.None);
     this.contextValue = CTX.ERROR;
+    this.iconPath = new vscode.ThemeIcon('warning');
   }
 }
 
@@ -53,7 +76,10 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
 
   private _loadingPromise: Promise<(FlowNode | ErrorNode)[]> | null = null;
   private _childCache = new Map<string, Promise<vscode.TreeItem[]>>();
+  private _artifactCache = new Map<string, Promise<vscode.TreeItem[]>>();
   private readonly scriptPath: string;
+  private _sortMode: SortMode = 'default';
+  private _runFilter: RunFilter = 'all';
 
   constructor(extensionPath: string) {
     this.scriptPath = path.join(extensionPath, 'python', 'get_data.py');
@@ -62,18 +88,31 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   refresh(): void {
     this._loadingPromise = null;
     this._childCache.clear();
+    this._artifactCache.clear();
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
-    return element;
+  cycleSortMode(): void {
+    const cycle: SortMode[] = ['default', 'name', 'type'];
+    const idx = cycle.indexOf(this._sortMode);
+    this._sortMode = cycle[(idx + 1) % cycle.length];
+    this._artifactCache.clear();
+    this._onDidChangeTreeData.fire();
+    vscode.window.showInformationMessage(`Artifact sort: ${this._sortMode}`);
   }
+
+  setRunFilter(filter: RunFilter): void {
+    if (this._runFilter !== filter) {
+      this._runFilter = filter;
+      this.refresh();
+    }
+  }
+
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem { return element; }
 
   getChildren(element?: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem[]> {
     if (!element) {
-      if (!this._loadingPromise) {
-        this._loadingPromise = this.loadFlows();
-      }
+      if (!this._loadingPromise) { this._loadingPromise = this.loadFlows(); }
       return this._loadingPromise;
     }
     if (element instanceof FlowNode) {
@@ -86,15 +125,16 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
       return this.cached(element.pathspec, () => this.loadTasks(element.pathspec));
     }
     if (element instanceof TaskNode) {
-      return this.cached(element.pathspec, () => this.loadArtifacts(element.pathspec));
+      if (!this._artifactCache.has(element.pathspec)) {
+        this._artifactCache.set(element.pathspec, this.loadArtifacts(element.pathspec));
+      }
+      return this._artifactCache.get(element.pathspec)!;
     }
     return [];
   }
 
   private cached(key: string, fn: () => Promise<vscode.TreeItem[]>): Promise<vscode.TreeItem[]> {
-    if (!this._childCache.has(key)) {
-      this._childCache.set(key, fn());
-    }
+    if (!this._childCache.has(key)) { this._childCache.set(key, fn()); }
     return this._childCache.get(key)!;
   }
 
@@ -123,7 +163,7 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   }
 
   private loadFlows(): Promise<(FlowNode | ErrorNode)[]> {
-    return this.runScript('flows').then(parsed => {
+    return this.runScript('flows', this._runFilter).then(parsed => {
       const nodes = Object.entries(parsed as Record<string, string[]>).map(
         ([flowName, runIds]) => new FlowNode(flowName, runIds)
       );
@@ -133,26 +173,30 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
 
   private loadSteps(runPathspec: string): Promise<vscode.TreeItem[]> {
     return this.runScript('steps', runPathspec).then(parsed => {
-      const stepNames = parsed as string[];
-      if (stepNames.length === 0) { return [new ErrorNode('No steps found')]; }
-      return stepNames.map(name => new StepNode(`${runPathspec}/${name}`, name));
+      const steps = parsed as StepInfo[];
+      if (steps.length === 0) { return [new ErrorNode('No steps found')]; }
+      return steps.map(info => new StepNode(`${runPathspec}/${info.name}`, info));
     }).catch(err => [new ErrorNode(`Failed to load steps: ${err.message}`)]);
   }
 
   private loadTasks(stepPathspec: string): Promise<vscode.TreeItem[]> {
     return this.runScript('tasks', stepPathspec).then(parsed => {
-      const taskIds = parsed as string[];
-      if (taskIds.length === 0) { return [new ErrorNode('No tasks found')]; }
-      return taskIds.map(id => new TaskNode(`${stepPathspec}/${id}`, id));
+      const tasks = parsed as TaskInfo[];
+      if (tasks.length === 0) { return [new ErrorNode('No tasks found')]; }
+      return tasks.map(info => new TaskNode(`${stepPathspec}/${info.id}`, info));
     }).catch(err => [new ErrorNode(`Failed to load tasks: ${err.message}`)]);
   }
 
   private loadArtifacts(taskPathspec: string): Promise<vscode.TreeItem[]> {
     return this.runScript('artifacts', taskPathspec).then(parsed => {
-      const artifacts = parsed as Record<string, string>;
-      const entries = Object.entries(artifacts);
+      let entries = Object.entries(parsed as Record<string, ArtifactInfo>);
       if (entries.length === 0) { return [new ErrorNode('No artifacts found')]; }
-      return entries.map(([name, value]) => new ArtifactNode(name, value));
+      if (this._sortMode === 'name') {
+        entries.sort(([a], [b]) => a.localeCompare(b));
+      } else if (this._sortMode === 'type') {
+        entries.sort(([, a], [, b]) => a.type.localeCompare(b.type));
+      }
+      return entries.map(([name, info]) => new ArtifactNode(name, info));
     }).catch(err => [new ErrorNode(`Failed to load artifacts: ${err.message}`)]);
   }
 }

@@ -36,8 +36,26 @@
       },
       {
         "command": "metaflow.refreshExplorer",
-        "title": "Refresh Metaflow Explorer",
+        "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "metaflow.filterRuns",
+        "title": "Filter Runs",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "metaflow.cycleSortArtifacts",
+        "title": "Sort Artifacts",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "metaflow.copyArtifactValue",
+        "title": "Copy Value"
+      },
+      {
+        "command": "metaflow.exportArtifactJson",
+        "title": "Export as JSON"
       }
     ],
     "menus": {
@@ -46,6 +64,28 @@
           "command": "metaflow.refreshExplorer",
           "when": "view == metaflowExplorer",
           "group": "navigation"
+        },
+        {
+          "command": "metaflow.filterRuns",
+          "when": "view == metaflowExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "metaflow.cycleSortArtifacts",
+          "when": "view == metaflowExplorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "metaflow.copyArtifactValue",
+          "when": "view == metaflowExplorer && viewItem == artifact",
+          "group": "1_artifact@1"
+        },
+        {
+          "command": "metaflow.exportArtifactJson",
+          "when": "view == metaflowExplorer && viewItem == artifact",
+          "group": "1_artifact@2"
         }
       ]
     },
