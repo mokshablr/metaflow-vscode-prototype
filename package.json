@@ -13,7 +13,8 @@
   "activationEvents": [
     "onCommand:metaflow.runFlow",
     "onCommand:metaflow.spinStep",
-    "onView:metaflowExplorer"
+    "onView:metaflowExplorer",
+    "onCommand:metaflow.showDAG"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -61,6 +62,11 @@
         "command": "metaflow.deleteRun",
         "title": "Delete Run",
         "icon": "$(trash)"
+      },
+      {
+        "command": "metaflow.showDAG",
+        "title": "Metaflow: Show DAG",
+        "icon": "$(type-hierarchy)"
       }
     ],
     "menus": {
@@ -78,6 +84,20 @@
         {
           "command": "metaflow.cycleSortArtifacts",
           "when": "view == metaflowExplorer",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "metaflow.showDAG",
+          "when": "resourceExtname == .py",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "metaflow.showDAG",
+          "when": "editorLangId == python",
           "group": "navigation"
         }
       ],
@@ -118,6 +138,11 @@
       {
         "command": "metaflow.spinStep",
         "key": "ctrl+alt+s",
+        "when": "editorLangId == python"
+      },
+      {
+        "command": "metaflow.showDAG",
+        "key": "ctrl+alt+d",
         "when": "editorLangId == python"
       }
     ]

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { runPythonCommand } from './runner';
 import { ArtifactNode, CTX, RunNode, MetaflowTreeProvider } from './metaflowTreeProvider';
+import { showDag } from './dagView';
 
 export function activate(context: vscode.ExtensionContext) {
   const provider = new MetaflowTreeProvider(context.extensionPath);
@@ -99,6 +100,16 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
       );
+    }),
+    vscode.commands.registerCommand('metaflow.showDAG', (uri?: vscode.Uri) => {
+      const filePath = uri?.fsPath
+        ?? (vscode.window.activeTextEditor?.document.languageId === 'python'
+          ? vscode.window.activeTextEditor.document.uri.fsPath : undefined);
+      if (!filePath?.endsWith('.py')) {
+        vscode.window.showErrorMessage('Open a Python file containing a Metaflow flow first.');
+        return;
+      }
+      showDag(context.extensionPath, filePath);
     }),
   );
 }
