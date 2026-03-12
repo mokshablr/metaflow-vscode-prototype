@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
 
-const CTX = { FLOW: 'flow', RUN: 'run', STEP: 'step', TASK: 'task', ARTIFACT: 'artifact', ERROR: 'error' } as const;
+export const CTX = { FLOW: 'flow', RUN: 'run', STEP: 'step', TASK: 'task', ARTIFACT: 'artifact', ERROR: 'error' } as const;
 
 type SortMode = 'default' | 'name' | 'type';
 type RunFilter = 'all' | 'successful' | 'failed';
@@ -21,8 +21,11 @@ class FlowNode extends vscode.TreeItem {
   }
 }
 
-class RunNode extends vscode.TreeItem {
-  constructor(public readonly pathspec: string, runId: string) {
+export class RunNode extends vscode.TreeItem {
+  constructor(
+    public readonly flowName: string,
+    public readonly runId: string
+  ) {
     super(runId, vscode.TreeItemCollapsibleState.Collapsed);
     this.contextValue = CTX.RUN;
   }
@@ -78,11 +81,13 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   private _childCache = new Map<string, Promise<vscode.TreeItem[]>>();
   private _artifactCache = new Map<string, Promise<vscode.TreeItem[]>>();
   private readonly scriptPath: string;
+  private readonly deleteScriptPath: string;
   private _sortMode: SortMode = 'default';
   private _runFilter: RunFilter = 'all';
 
   constructor(extensionPath: string) {
     this.scriptPath = path.join(extensionPath, 'python', 'get_data.py');
+    this.deleteScriptPath = path.join(extensionPath, 'python', 'delete_run.py');
   }
 
   refresh(): void {
@@ -108,6 +113,10 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     }
   }
 
+  deleteRun(flowName: string, runId: string): Promise<void> {
+    return this.runScript(this.deleteScriptPath, flowName, runId).then(() => undefined);
+  }
+
   getTreeItem(element: vscode.TreeItem): vscode.TreeItem { return element; }
 
   getChildren(element?: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem[]> {
@@ -116,10 +125,11 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
       return this._loadingPromise;
     }
     if (element instanceof FlowNode) {
-      return element.runIds.map(id => new RunNode(`${element.flowName}/${id}`, id));
+      return element.runIds.map(id => new RunNode(element.flowName, id));
     }
     if (element instanceof RunNode) {
-      return this.cached(element.pathspec, () => this.loadSteps(element.pathspec));
+      const runPathspec = `${element.flowName}/${element.runId}`;
+      return this.cached(runPathspec, () => this.loadSteps(runPathspec));
     }
     if (element instanceof StepNode) {
       return this.cached(element.pathspec, () => this.loadTasks(element.pathspec));
@@ -138,11 +148,11 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     return this._childCache.get(key)!;
   }
 
-  private runScript(...args: string[]): Promise<unknown> {
+  private runScript(scriptPath: string, ...args: string[]): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const pythonPath = vscode.workspace.getConfiguration('metaflow').get<string>('pythonPath', 'python3');
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-      const child = spawn(pythonPath, [this.scriptPath, ...args], { cwd });
+      const child = spawn(pythonPath, [scriptPath, ...args], { cwd });
       const out: string[] = [], err: string[] = [];
       child.stdout?.on('data', (c: Buffer) => out.push(c.toString()));
       child.stderr?.on('data', (c: Buffer) => err.push(c.toString()));
@@ -163,7 +173,7 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   }
 
   private loadFlows(): Promise<(FlowNode | ErrorNode)[]> {
-    return this.runScript('flows', this._runFilter).then(parsed => {
+    return this.runScript(this.scriptPath, 'flows', this._runFilter).then(parsed => {
       const nodes = Object.entries(parsed as Record<string, string[]>).map(
         ([flowName, runIds]) => new FlowNode(flowName, runIds)
       );
@@ -172,7 +182,7 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   }
 
   private loadSteps(runPathspec: string): Promise<vscode.TreeItem[]> {
-    return this.runScript('steps', runPathspec).then(parsed => {
+    return this.runScript(this.scriptPath, 'steps', runPathspec).then(parsed => {
       const steps = parsed as StepInfo[];
       if (steps.length === 0) { return [new ErrorNode('No steps found')]; }
       return steps.map(info => new StepNode(`${runPathspec}/${info.name}`, info));
@@ -180,7 +190,7 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   }
 
   private loadTasks(stepPathspec: string): Promise<vscode.TreeItem[]> {
-    return this.runScript('tasks', stepPathspec).then(parsed => {
+    return this.runScript(this.scriptPath, 'tasks', stepPathspec).then(parsed => {
       const tasks = parsed as TaskInfo[];
       if (tasks.length === 0) { return [new ErrorNode('No tasks found')]; }
       return tasks.map(info => new TaskNode(`${stepPathspec}/${info.id}`, info));
@@ -188,7 +198,7 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   }
 
   private loadArtifacts(taskPathspec: string): Promise<vscode.TreeItem[]> {
-    return this.runScript('artifacts', taskPathspec).then(parsed => {
+    return this.runScript(this.scriptPath, 'artifacts', taskPathspec).then(parsed => {
       let entries = Object.entries(parsed as Record<string, ArtifactInfo>);
       if (entries.length === 0) { return [new ErrorNode('No artifacts found')]; }
       if (this._sortMode === 'name') {

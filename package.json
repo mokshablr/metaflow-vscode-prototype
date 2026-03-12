@@ -56,6 +56,11 @@
       {
         "command": "metaflow.exportArtifactJson",
         "title": "Export as JSON"
+      },
+      {
+        "command": "metaflow.deleteRun",
+        "title": "Delete Run",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -86,6 +91,11 @@
           "command": "metaflow.exportArtifactJson",
           "when": "view == metaflowExplorer && viewItem == artifact",
           "group": "1_artifact@2"
+        },
+        {
+          "command": "metaflow.deleteRun",
+          "when": "view == metaflowExplorer && viewItem == run",
+          "group": "navigation@99"
         }
       ]
     },

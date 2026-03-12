@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { runPythonCommand } from './runner';
-import { ArtifactNode, MetaflowTreeProvider } from './metaflowTreeProvider';
+import { ArtifactNode, CTX, RunNode, MetaflowTreeProvider } from './metaflowTreeProvider';
 
 export function activate(context: vscode.ExtensionContext) {
   const provider = new MetaflowTreeProvider(context.extensionPath);
@@ -51,6 +51,54 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.workspace.fs.writeFile(uri, Buffer.from(payload, 'utf8'));
         vscode.window.showInformationMessage(`Exported to ${uri.fsPath}`);
       }
+    }),
+    vscode.commands.registerCommand('metaflow.deleteRun', async (node: unknown) => {
+      if (!node || (node as vscode.TreeItem).contextValue !== CTX.RUN) {
+        vscode.window.showErrorMessage('Select a run first.');
+        return;
+      }
+      const runNode = node as RunNode;
+      const { flowName, runId } = runNode;
+
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspaceFolder) {
+        vscode.window.showErrorMessage('No workspace folder open. Open your project folder first.');
+        return;
+      }
+      const metaflowDir = vscode.Uri.joinPath(vscode.Uri.file(workspaceFolder), '.metaflow');
+      try {
+        await vscode.workspace.fs.stat(metaflowDir);
+      } catch {
+        vscode.window.showErrorMessage(
+          'Deletion is only supported for the local metadata provider (.metaflow directory not found).'
+        );
+        return;
+      }
+
+      const confirm = await vscode.window.showWarningMessage(
+        `Delete run "${flowName}/${runId}"? This will permanently remove the run and all its artifacts.`,
+        { modal: true },
+        'Delete'
+      );
+      if (confirm !== 'Delete') { return; }
+
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Deleting run ${flowName}/${runId}…`,
+          cancellable: false,
+        },
+        async () => {
+          try {
+            await provider.deleteRun(flowName, runId);
+            provider.refresh();
+            vscode.window.showInformationMessage(`Run "${flowName}/${runId}" deleted.`);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`Failed to delete run "${flowName}/${runId}": ${msg}`);
+          }
+        }
+      );
     }),
   );
 }
