@@ -4,8 +4,12 @@
   "description": "Metaflow VS Code extension",
   "version": "0.2.0",
   "publisher": "local",
-  "engines": { "vscode": "^1.80.0" },
-  "categories": ["Other"],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/mokshablr/metaflow-vscode-prototype"
@@ -149,12 +153,20 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "compile:tests": "tsc -p ./tsconfig.test.json",
     "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile:tests",
+    "test": "node ./out/test/runTest.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
+    "@types/glob": "^9.0.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.80.0",
+    "@vscode/test-electron": "^2.5.2",
+    "glob": "^13.0.6",
+    "mocha": "^11.7.5",
     "typescript": "^5.0.0"
   }
 }

@@ -1,5 +1,8 @@
 out/
 node_modules/
 *.vsix
-
+.vscode-test/
 .claude/
+__pycache__/
+*.pyc
+.vscode/

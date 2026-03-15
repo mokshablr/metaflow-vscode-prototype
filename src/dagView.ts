@@ -7,13 +7,13 @@ let currentFlowFile: string | undefined;
 let saveListener: vscode.Disposable | undefined;
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
-interface DagNode {
+export interface DagNode {
   id: string;
   type: string;
   line: number | null;
 }
 
-interface DagData {
+export interface DagData {
   nodes: DagNode[];
   edges: { from: string; to: string }[];
 }
@@ -205,7 +205,11 @@ function getWebviewContent(data: DagData): string {
 </html>`;
 }
 
-export async function showDag(extensionPath: string, flowFilePath: string): Promise<void> {
+export function generateHtml(nodes: DagNode[], edges: { from: string; to: string }[]): string {
+  return getWebviewContent({ nodes, edges });
+}
+
+export async function showDag(extensionPath: string, flowFilePath: string): Promise<vscode.WebviewPanel | undefined> {
   let data: DagData;
   try {
     data = await vscode.window.withProgress(
@@ -215,7 +219,7 @@ export async function showDag(extensionPath: string, flowFilePath: string): Prom
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     vscode.window.showErrorMessage(`Failed to extract DAG: ${msg}`);
-    return;
+    return undefined;
   }
 
   if (!currentPanel) {
@@ -260,4 +264,6 @@ export async function showDag(extensionPath: string, flowFilePath: string): Prom
       refreshTimer = setTimeout(() => refreshDag(extensionPath, currentFlowFile!), 400);
     }
   });
+
+  return currentPanel;
 }

@@ -4,14 +4,27 @@ import { runPythonScript } from './pythonRunner';
 
 export const CTX = { FLOW: 'flow', RUN: 'run', STEP: 'step', TASK: 'task', ARTIFACT: 'artifact', ERROR: 'error' } as const;
 
-type SortMode = 'default' | 'name' | 'type';
-type RunFilter = 'all' | 'successful' | 'failed';
+export type SortMode = 'default' | 'name' | 'type';
+export type RunFilter = 'all' | 'successful' | 'failed';
 
-type NodeStatus = 'done' | 'failed' | 'running' | 'unknown';
+export const VALID_STATUSES = ['done', 'failed', 'running', 'unknown'] as const;
+export type NodeStatus = typeof VALID_STATUSES[number];
 
-interface ArtifactInfo { type: string; preview: string; raw: string; }
-interface StepInfo { name: string; status: NodeStatus; }
-interface TaskInfo { id: string; status: NodeStatus; }
+export interface ArtifactInfo { type: string; preview: string; raw: string; }
+export interface StepInfo { name: string; status: NodeStatus; }
+export interface TaskInfo { id: string; status: NodeStatus; }
+
+export function sortArtifactEntries(
+  entries: [string, ArtifactInfo][],
+  mode: SortMode
+): [string, ArtifactInfo][] {
+  if (mode === 'name') {
+    return [...entries].sort(([a], [b]) => a.localeCompare(b));
+  } else if (mode === 'type') {
+    return [...entries].sort(([, a], [, b]) => a.type.localeCompare(b.type));
+  }
+  return entries;
+}
 
 class FlowNode extends vscode.TreeItem {
   constructor(public readonly flowName: string, public readonly runIds: string[]) {
@@ -39,7 +52,7 @@ function applyStatusIcon(item: vscode.TreeItem, status: string): void {
   }
 }
 
-class StepNode extends vscode.TreeItem {
+export class StepNode extends vscode.TreeItem {
   constructor(public readonly pathspec: string, info: StepInfo) {
     super(info.name, vscode.TreeItemCollapsibleState.Collapsed);
     this.contextValue = CTX.STEP;
@@ -47,7 +60,7 @@ class StepNode extends vscode.TreeItem {
   }
 }
 
-class TaskNode extends vscode.TreeItem {
+export class TaskNode extends vscode.TreeItem {
   constructor(public readonly pathspec: string, info: TaskInfo) {
     super(info.id, vscode.TreeItemCollapsibleState.Collapsed);
     this.contextValue = CTX.TASK;
@@ -104,6 +117,9 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     this._onDidChangeTreeData.fire();
     vscode.window.showInformationMessage(`Artifact sort: ${this._sortMode}`);
   }
+
+  getSortMode(): SortMode { return this._sortMode; }
+  getRunFilter(): RunFilter { return this._runFilter; }
 
   setRunFilter(filter: RunFilter): void {
     if (this._runFilter !== filter) {
@@ -176,11 +192,7 @@ export class MetaflowTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     return runPythonScript(this.scriptPath, ['artifacts', taskPathspec]).then(parsed => {
       let entries = Object.entries(parsed as Record<string, ArtifactInfo>);
       if (entries.length === 0) { return [new ErrorNode('No artifacts found')]; }
-      if (this._sortMode === 'name') {
-        entries.sort(([a], [b]) => a.localeCompare(b));
-      } else if (this._sortMode === 'type') {
-        entries.sort(([, a], [, b]) => a.type.localeCompare(b.type));
-      }
+      entries = sortArtifactEntries(entries, this._sortMode);
       return entries.map(([name, info]) => new ArtifactNode(name, info));
     }).catch(err => [new ErrorNode(`Failed to load artifacts: ${err.message}`)]);
   }
