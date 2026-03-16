@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { runPythonScript } from './pythonRunner';
+import { StepStatusInfo } from './runMonitor';
 
 let currentPanel: vscode.WebviewPanel | undefined;
 let currentFlowFile: string | undefined;
@@ -153,6 +154,22 @@ function getWebviewContent(data: DagData): string {
               'target-arrow-color': '#fff',
               'width': 3,
             }
+          },
+          {
+            selector: 'node.node-done',
+            style: { 'background-color': '#4caf50' }
+          },
+          {
+            selector: 'node.node-running',
+            style: { 'background-color': '#2196f3' }
+          },
+          {
+            selector: 'node.node-pending',
+            style: { 'background-color': '#9e9e9e' }
+          },
+          {
+            selector: 'node.node-failed',
+            style: { 'background-color': '#f44336' }
           }
         ],
         layout: {
@@ -198,6 +215,15 @@ function getWebviewContent(data: DagData): string {
       const msg = event.data;
       if (msg.command === 'updateDag') {
         buildGraph(msg.data.nodes, msg.data.edges);
+      }
+      if (msg.command === 'updateRunStatus' && cy) {
+        for (const step of msg.steps) {
+          const node = cy.getElementById(step.name);
+          if (node.length) {
+            node.removeClass('node-done node-running node-pending node-failed');
+            node.addClass('node-' + step.status);
+          }
+        }
       }
     });
   </script>
@@ -266,4 +292,10 @@ export async function showDag(extensionPath: string, flowFilePath: string): Prom
   });
 
   return currentPanel;
+}
+
+export function updateDagRunStatus(steps: StepStatusInfo[]): void {
+  if (currentPanel) {
+    currentPanel.webview.postMessage({ command: 'updateRunStatus', steps });
+  }
 }

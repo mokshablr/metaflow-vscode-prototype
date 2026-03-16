@@ -18,7 +18,8 @@
     "onCommand:metaflow.runFlow",
     "onCommand:metaflow.spinStep",
     "onView:metaflowExplorer",
-    "onCommand:metaflow.showDAG"
+    "onCommand:metaflow.showDAG",
+    "onCommand:metaflow.monitorRun"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -71,6 +72,10 @@
         "command": "metaflow.showDAG",
         "title": "Metaflow: Show DAG",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "metaflow.monitorRun",
+        "title": "Metaflow: Monitor Run"
       }
     ],
     "menus": {
@@ -147,6 +152,11 @@
       {
         "command": "metaflow.showDAG",
         "key": "ctrl+alt+d",
+        "when": "editorLangId == python"
+      },
+      {
+        "command": "metaflow.monitorRun",
+        "key": "ctrl+alt+m",
         "when": "editorLangId == python"
       }
     ]

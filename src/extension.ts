@@ -1,7 +1,54 @@
 import * as vscode from 'vscode';
-import { runPythonCommand } from './runner';
+import { runPythonCommand, onRunStarted, disposeRunner } from './runner';
 import { ArtifactNode, CTX, RunNode, MetaflowTreeProvider } from './metaflowTreeProvider';
-import { showDag } from './dagView';
+import { showDag, updateDagRunStatus } from './dagView';
+import { RunMonitor, RunStatusData, MonitorStopReason } from './runMonitor';
+import { RunMonitorView } from './runMonitorView';
+
+const activeMonitors = new Map<string, { monitor: RunMonitor; view: RunMonitorView }>();
+
+function startMonitoring(
+  extensionPath: string,
+  flowName: string,
+  runId: string,
+  flowFilePath?: string
+): void {
+  const key = `${flowName}/${runId}`;
+
+  const existing = activeMonitors.get(key);
+  if (existing) {
+    existing.view.show(flowName, runId);
+    return;
+  }
+
+  const monitor = new RunMonitor(extensionPath, flowName, runId, flowFilePath);
+  const view = new RunMonitorView();
+
+  monitor.onStatusUpdate((data: RunStatusData) => {
+    view.update(data);
+    updateDagRunStatus(data.steps);
+  });
+
+  monitor.onMonitorStopped((reason: MonitorStopReason) => {
+    activeMonitors.delete(key);
+    if (reason === 'completed') {
+      vscode.window.showInformationMessage(`Run ${key} completed successfully.`);
+    } else if (reason === 'failed') {
+      vscode.window.showWarningMessage(`Run ${key} failed.`);
+    } else if (reason === 'error') {
+      vscode.window.showWarningMessage(`Monitor for ${key} stopped due to repeated errors.`);
+    }
+  });
+
+  view.onDispose(() => {
+    monitor.stop('panel_closed');
+    activeMonitors.delete(key);
+  });
+
+  activeMonitors.set(key, { monitor, view });
+  view.show(flowName, runId);
+  monitor.start();
+}
 
 export function activate(context: vscode.ExtensionContext) {
   const provider = new MetaflowTreeProvider(context.extensionPath);
@@ -111,7 +158,44 @@ export function activate(context: vscode.ExtensionContext) {
       }
       showDag(context.extensionPath, filePath);
     }),
+    vscode.commands.registerCommand('metaflow.monitorRun', async () => {
+      const flowName = await vscode.window.showInputBox({
+        prompt: 'Enter the flow name',
+        placeHolder: 'e.g., MyFlow',
+      });
+      if (!flowName) { return; }
+
+      const runId = await vscode.window.showInputBox({
+        prompt: 'Enter the run ID',
+        placeHolder: 'e.g., 1840392213',
+      });
+      if (!runId) { return; }
+
+      startMonitoring(context.extensionPath, flowName, runId);
+    }),
+  );
+
+  // Auto-monitor when a run starts
+  context.subscriptions.push(
+    onRunStarted(async (info) => {
+      let flowName = info.flowName;
+      if (!flowName) {
+        flowName = await vscode.window.showInputBox({
+          prompt: 'Could not detect flow name from output. Enter the flow class name:',
+          placeHolder: 'e.g., LinearFlow',
+        });
+        if (!flowName) { return; }
+      }
+      startMonitoring(context.extensionPath, flowName, info.runId, info.flowFilePath);
+    })
   );
 }
 
-export function deactivate() {}
+export function deactivate() {
+  for (const { monitor, view } of activeMonitors.values()) {
+    monitor.dispose();
+    view.dispose();
+  }
+  activeMonitors.clear();
+  disposeRunner();
+}

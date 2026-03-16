@@ -32,6 +32,7 @@ suite('Extension Activation', () => {
       'metaflow.exportArtifactJson',
       'metaflow.deleteRun',
       'metaflow.showDAG',
+      'metaflow.monitorRun',
     ];
 
     for (const cmd of expectedCommands) {
