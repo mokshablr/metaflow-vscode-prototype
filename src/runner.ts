@@ -33,7 +33,7 @@ export function parseFlowName(line: string): string | null {
 }
 
 /** Fallback: extract FlowSpec subclass name from source file via regex. */
-function extractFlowNameFromFile(filePath: string): string | undefined {
+export function extractFlowNameFromFile(filePath: string): string | undefined {
   try {
     const src = fs.readFileSync(filePath, 'utf8');
     const m = src.match(/class\s+([A-Z][A-Za-z0-9_]+)\s*\(\s*FlowSpec\s*\)/);
@@ -117,7 +117,7 @@ export async function runPythonCommand(mode: 'run' | 'spin'): Promise<void> {
   });
 }
 
-function findEnclosingDef(editor: vscode.TextEditor): string | null {
+export function findEnclosingDef(editor: vscode.TextEditor): string | null {
   const cursorLine = editor.selection.active.line;
   for (let i = cursorLine; i >= 0; i--) {
     const text = editor.document.lineAt(i).text.trim();

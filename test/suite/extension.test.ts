@@ -33,6 +33,10 @@ suite('Extension Activation', () => {
       'metaflow.deleteRun',
       'metaflow.showDAG',
       'metaflow.monitorRun',
+      'metaflow.debugStep',
+      'metaflow.debugStepDirect',
+      'metaflow.debugStepFromEditor',
+      'metaflow.showRunDAG',
     ];
 
     for (const cmd of expectedCommands) {

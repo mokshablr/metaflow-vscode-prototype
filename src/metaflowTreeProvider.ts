@@ -12,7 +12,7 @@ export type NodeStatus = typeof VALID_STATUSES[number];
 
 export interface ArtifactInfo { type: string; preview: string; raw: string; }
 export interface StepInfo { name: string; status: NodeStatus; }
-export interface TaskInfo { id: string; status: NodeStatus; }
+export interface TaskInfo { id: string; status: NodeStatus; duration?: number | null; }
 
 export function sortArtifactEntries(
   entries: [string, ArtifactInfo][],

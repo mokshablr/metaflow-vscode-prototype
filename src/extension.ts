@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
-import { runPythonCommand, onRunStarted, disposeRunner } from './runner';
-import { ArtifactNode, CTX, RunNode, MetaflowTreeProvider } from './metaflowTreeProvider';
+import { runPythonCommand, onRunStarted, disposeRunner, extractFlowNameFromFile } from './runner';
+import { ArtifactNode, CTX, RunNode, StepNode, MetaflowTreeProvider } from './metaflowTreeProvider';
 import { showDag, updateDagRunStatus } from './dagView';
 import { RunMonitor, RunStatusData, MonitorStopReason } from './runMonitor';
 import { RunMonitorView } from './runMonitorView';
+import { debugExecution, debugStepFromEditor, resolveFlowFile, pickRunForFlow, cleanupDebugWrappers } from './debugConfig';
 
 const activeMonitors = new Map<string, { monitor: RunMonitor; view: RunMonitorView }>();
 
@@ -148,7 +149,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
       );
     }),
-    vscode.commands.registerCommand('metaflow.showDAG', (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('metaflow.showDAG', async (uri?: vscode.Uri) => {
       const filePath = uri?.fsPath
         ?? (vscode.window.activeTextEditor?.document.languageId === 'python'
           ? vscode.window.activeTextEditor.document.uri.fsPath : undefined);
@@ -156,7 +157,47 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage('Open a Python file containing a Metaflow flow first.');
         return;
       }
-      showDag(context.extensionPath, filePath);
+
+      const flowName = extractFlowNameFromFile(filePath);
+      if (!flowName) {
+        vscode.window.showErrorMessage('No FlowSpec subclass found in this file.');
+        return;
+      }
+
+      let selectedRunId: string | undefined;
+      try {
+        selectedRunId = await pickRunForFlow(context.extensionPath, flowName);
+        // undefined means 0 runs — show DAG without run context
+      } catch {
+        // No runs available — show DAG without run context
+      }
+
+      showDag(context.extensionPath, filePath, flowName, selectedRunId);
+    }),
+    vscode.commands.registerCommand('metaflow.debugStep', async (node?: unknown) => {
+      if (!(node instanceof StepNode)) {
+        vscode.window.showErrorMessage('Right-click a step in the Metaflow Explorer to debug it.');
+        return;
+      }
+      const [flowName, runId, stepName] = node.pathspec.split('/');
+      await debugExecution(context.extensionPath, flowName, runId, stepName);
+    }),
+    vscode.commands.registerCommand(
+      'metaflow.debugStepDirect',
+      async (flowName: string, runId: string, stepName: string) => {
+        await debugExecution(context.extensionPath, flowName, runId, stepName);
+      }
+    ),
+    vscode.commands.registerCommand('metaflow.debugStepFromEditor', async () => {
+      await debugStepFromEditor(context.extensionPath);
+    }),
+    vscode.commands.registerCommand('metaflow.showRunDAG', async (node?: unknown) => {
+      if (!(node instanceof RunNode)) { return; }
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspaceRoot) { return; }
+      const flowFile = await resolveFlowFile(workspaceRoot, node.flowName);
+      if (!flowFile) { return; }
+      showDag(context.extensionPath, flowFile, node.flowName, node.runId);
     }),
     vscode.commands.registerCommand('metaflow.monitorRun', async () => {
       const flowName = await vscode.window.showInputBox({
@@ -198,4 +239,5 @@ export function deactivate() {
   }
   activeMonitors.clear();
   disposeRunner();
+  cleanupDebugWrappers();
 }

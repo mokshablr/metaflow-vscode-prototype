@@ -47,9 +47,11 @@ function navigateToStep(flowFilePath: string, line: number): void {
   });
 }
 
-function getWebviewContent(data: DagData): string {
+function getWebviewContent(data: DagData, flowName?: string, runId?: string): string {
   const nodesJson = JSON.stringify(data.nodes);
   const edgesJson = JSON.stringify(data.edges);
+  const flowNameJs = JSON.stringify(flowName ?? '');
+  const runIdJs = JSON.stringify(runId ?? '');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -89,7 +91,7 @@ function getWebviewContent(data: DagData): string {
 
     let cy = null;
 
-    function buildGraph(nodes, edges) {
+    function buildGraph(nodes, edges, flowName, runId) {
       document.getElementById('loading').style.display = 'none';
 
       if (cy) { cy.destroy(); }
@@ -97,7 +99,7 @@ function getWebviewContent(data: DagData): string {
       const elements = [];
       for (const n of nodes) {
         elements.push({
-          data: { id: n.id, label: n.id, type: n.type, line: n.line },
+          data: { id: n.id, label: n.id, type: n.type, line: n.line, flowName: flowName, runId: runId },
         });
       }
       for (const e of edges) {
@@ -198,23 +200,31 @@ function getWebviewContent(data: DagData): string {
         node.neighborhood('node').removeClass('hover');
       });
 
-      // Click to navigate
+      // Left-click: navigate to step definition
       cy.on('tap', 'node', function(e) {
         const data = e.target.data();
         if (data.line != null) {
           vscode.postMessage({ command: 'navigateToStep', stepName: data.id, line: data.line });
         }
       });
+
+      // Right-click: debug step (only when run context is available)
+      cy.on('cxttap', 'node', function(e) {
+        const d = e.target.data();
+        if (d.flowName && d.runId) {
+          vscode.postMessage({ command: 'debugStep', flowName: d.flowName, runId: d.runId, stepName: d.id });
+        }
+      });
     }
 
     // Initial render
-    buildGraph(${nodesJson}, ${edgesJson});
+    buildGraph(${nodesJson}, ${edgesJson}, ${flowNameJs}, ${runIdJs});
 
     // Listen for updates from extension
     window.addEventListener('message', function(event) {
       const msg = event.data;
       if (msg.command === 'updateDag') {
-        buildGraph(msg.data.nodes, msg.data.edges);
+        buildGraph(msg.data.nodes, msg.data.edges, msg.flowName || '', msg.runId || '');
       }
       if (msg.command === 'updateRunStatus' && cy) {
         for (const step of msg.steps) {
@@ -231,11 +241,11 @@ function getWebviewContent(data: DagData): string {
 </html>`;
 }
 
-export function generateHtml(nodes: DagNode[], edges: { from: string; to: string }[]): string {
-  return getWebviewContent({ nodes, edges });
+export function generateHtml(nodes: DagNode[], edges: { from: string; to: string }[], flowName?: string, runId?: string): string {
+  return getWebviewContent({ nodes, edges }, flowName, runId);
 }
 
-export async function showDag(extensionPath: string, flowFilePath: string): Promise<vscode.WebviewPanel | undefined> {
+export async function showDag(extensionPath: string, flowFilePath: string, flowName?: string, runId?: string): Promise<vscode.WebviewPanel | undefined> {
   let data: DagData;
   try {
     data = await vscode.window.withProgress(
@@ -260,6 +270,14 @@ export async function showDag(extensionPath: string, flowFilePath: string): Prom
       if (msg.command === 'navigateToStep' && currentFlowFile && msg.line != null) {
         navigateToStep(currentFlowFile, msg.line);
       }
+      if (msg.command === 'debugStep') {
+        vscode.commands.executeCommand(
+          'metaflow.debugStepDirect',
+          msg.flowName,
+          msg.runId,
+          msg.stepName
+        );
+      }
     });
 
     currentPanel.onDidDispose(() => {
@@ -272,14 +290,18 @@ export async function showDag(extensionPath: string, flowFilePath: string): Prom
 
     // First creation — must set HTML to load Cytoscape scripts
     currentFlowFile = flowFilePath;
-    currentPanel.title = `DAG: ${path.basename(flowFilePath)}`;
-    currentPanel.webview.html = getWebviewContent(data);
+    currentPanel.title = runId
+      ? `DAG: ${path.basename(flowFilePath)} (run ${runId})`
+      : `DAG: ${path.basename(flowFilePath)}`;
+    currentPanel.webview.html = getWebviewContent(data, flowName, runId);
   } else {
     currentPanel.reveal(vscode.ViewColumn.Beside);
     currentFlowFile = flowFilePath;
-    currentPanel.title = `DAG: ${path.basename(flowFilePath)}`;
-    // Reuse existing webview — send data via message to avoid CDN re-fetch
-    currentPanel.webview.postMessage({ command: 'updateDag', data });
+    currentPanel.title = runId
+      ? `DAG: ${path.basename(flowFilePath)} (run ${runId})`
+      : `DAG: ${path.basename(flowFilePath)}`;
+    // Reuse existing webview — send data and updated run context via message
+    currentPanel.webview.postMessage({ command: 'updateDag', data, flowName: flowName ?? '', runId: runId ?? '' });
   }
 
   // Set up debounced live refresh on save
