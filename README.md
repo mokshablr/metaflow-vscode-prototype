@@ -19,6 +19,14 @@ Right-click actions on artifacts: copy value, export as JSON. Right-click on a r
 
 You can also filter runs (all / successful / failed) and sort artifacts (default / alphabetical / by type).
 
+### Run Launcher
+
+- **Launch Run** (`Ctrl+Alt+L`): guided UI for launching a flow run with parameters and backend selection
+  1. Parses `Parameter(...)` definitions from the active flow file using Python AST — no Metaflow import needed, works even if dependencies are missing
+  2. Shows an InputBox for each detected parameter with the default value pre-filled; pressing Escape cancels the entire launch
+  3. Shows a QuickPick to choose the execution backend: Local, Kubernetes (`--with kubernetes`), or AWS Batch (`--with batch`)
+  4. Builds the full `python flow.py run --<param> <value> ... --with <backend>` command and streams it through the same output channel as `Run Flow`, including automatic run monitoring
+
 ### DAG Visualization
 
 - **Show DAG** (`Ctrl+Alt+D`): opens a webview with the flow rendered as an interactive graph
@@ -54,11 +62,21 @@ The original extension ran flows by sending commands to a VS Code terminal. I sw
 
 The reason is monitoring: to auto-start the run monitor, the extension needs to detect the run ID from Metaflow's output (it appears in a line like `run-id: 1234`). With a terminal you can't read stdout programmatically. With `spawn` you can scan each line as it arrives and fire the `onRunStarted` event as soon as the run ID shows up, before the flow has even finished its first step.
 
-### DAG parsed from AST, not by importing the flow
+### DAG extracted via `FlowGraph` (imports the module)
 
-`get_dag.py` parses the flow file with Python's `ast` module to find step definitions and their edges. It never imports or runs the flow.
+`get_dag.py` loads the flow file as a Python module and passes the FlowSpec subclass to `metaflow.graph.FlowGraph`, which is Metaflow's own internal DAG analyser.
 
-I tried the import approach first (it's simpler) but it broke on any flow that had missing dependencies or side effects at import time. Parsing the AST is a bit more work but it's safe, fast, and doesn't care whether the user's environment has everything installed.
+The alternative — reimplementing step-resolution logic with raw AST parsing — would be fragile and break on decorator patterns that `FlowGraph` already handles correctly. Using Metaflow's own graph class means the extension always agrees with what Metaflow itself sees.
+
+The trade-off is that importing the module executes any code at module level. Flows with database connections or GPU init outside `if __name__ == '__main__':` will run that code during DAG extraction. In practice this is rarely an issue, but it's worth knowing.
+
+### Run Launcher: AST parsing for parameter discovery (not module import)
+
+`get_parameters.py` is the opposite choice from `get_dag.py`: it uses `ast.parse()` to find `Parameter(...)` class-attribute assignments without importing the flow.
+
+The Run Launcher needs to work before a run starts — meaning Metaflow may not be installed in the active environment, and the flow's dependencies may not be satisfied. Importing the module would fail in those cases. AST parsing reads only the syntax of the file, so it works regardless of whether the environment is complete.
+
+The trade-off is that AST parsing can't resolve dynamic parameter definitions (e.g., a parameter built conditionally at runtime), but in practice Metaflow parameters are always static class-level assignments.
 
 ### Cytoscape.js for the DAG view
 
@@ -116,6 +134,7 @@ Uses `@vscode/test-electron` (downloaded automatically on first run). Tests that
 | Python Integration | `get_data.py` and `get_dag.py` schema validation end-to-end; error paths for invalid inputs |
 | Python Process Spawning | Large stdout buffering, stderr capture, timeout, ENOENT handling |
 | Run Monitor | Polling logic, adaptive intervals, completion detection, error cap |
+| Run Launcher | `buildRunArgs` pure function (param flags, backend flags, empty-value skipping); `get_parameters.py` schema contract (count, keys, type/default values, error path) |
 
 ## Building a `.vsix` package
 
@@ -127,6 +146,4 @@ code --install-extension metaflow-vscode-prototype-0.2.0.vsix
 
 ## Roadmap
 
-- One-click debug configuration (auto-generate `.vscode/launch.json` for any step)
-- Run launcher with parameter and backend selection (local / Kubernetes / AWS Batch)
 - Inline card preview

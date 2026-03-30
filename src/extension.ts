@@ -5,6 +5,7 @@ import { showDag, updateDagRunStatus } from './dagView';
 import { RunMonitor, RunStatusData, MonitorStopReason } from './runMonitor';
 import { RunMonitorView } from './runMonitorView';
 import { debugExecution, debugStepFromEditor, resolveFlowFile, pickRunForFlow, cleanupDebugWrappers } from './debugConfig';
+import { launchRun } from './runLauncher';
 
 const activeMonitors = new Map<string, { monitor: RunMonitor; view: RunMonitorView }>();
 
@@ -62,6 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
     treeView,
     vscode.commands.registerCommand('metaflow.runFlow', () => runPythonCommand('run')),
     vscode.commands.registerCommand('metaflow.spinStep', () => runPythonCommand('spin')),
+    vscode.commands.registerCommand('metaflow.launchRun', () => launchRun(context.extensionPath)),
     vscode.commands.registerCommand('metaflow.refreshExplorer', () => provider.refresh()),
     vscode.commands.registerCommand('metaflow.cycleSortArtifacts', () => provider.cycleSortMode()),
     vscode.commands.registerCommand('metaflow.filterRuns', async () => {

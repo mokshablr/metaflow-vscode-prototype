@@ -22,7 +22,8 @@
     "onCommand:metaflow.monitorRun",
     "onCommand:metaflow.debugStep",
     "onCommand:metaflow.debugStepFromEditor",
-    "onCommand:metaflow.showRunDAG"
+    "onCommand:metaflow.showRunDAG",
+    "onCommand:metaflow.launchRun"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -92,6 +93,10 @@
         "command": "metaflow.showRunDAG",
         "title": "Show DAG",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "metaflow.launchRun",
+        "title": "Metaflow: Launch Run"
       }
     ],
     "menus": {
@@ -188,6 +193,11 @@
       {
         "command": "metaflow.debugStepFromEditor",
         "key": "ctrl+alt+shift+d",
+        "when": "editorLangId == python"
+      },
+      {
+        "command": "metaflow.launchRun",
+        "key": "ctrl+alt+l",
         "when": "editorLangId == python"
       }
     ]

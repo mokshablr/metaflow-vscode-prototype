@@ -43,7 +43,7 @@ export function extractFlowNameFromFile(filePath: string): string | undefined {
   }
 }
 
-export async function runPythonCommand(mode: 'run' | 'spin'): Promise<void> {
+export async function runPythonCommand(mode: 'run' | 'spin', extraArgs?: string[]): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     return;
@@ -59,6 +59,9 @@ export async function runPythonCommand(mode: 'run' | 'spin'): Promise<void> {
   const args = [filePath];
   if (mode === 'run') {
     args.push('run');
+    if (extraArgs) {
+      args.push(...extraArgs);
+    }
   } else {
     const stepName = findEnclosingDef(editor);
     if (!stepName) {

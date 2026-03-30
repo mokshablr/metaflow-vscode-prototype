@@ -37,6 +37,7 @@ suite('Extension Activation', () => {
       'metaflow.debugStepDirect',
       'metaflow.debugStepFromEditor',
       'metaflow.showRunDAG',
+      'metaflow.launchRun',
     ];
 
     for (const cmd of expectedCommands) {
